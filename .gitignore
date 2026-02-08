@@ -24,5 +24,10 @@ htmlcov/
 *.log
 .ace-tool/
 
-null
+nul
 nul.*
+
+.claude
+.ace-tool
+.idea
+.playwright-mcp
