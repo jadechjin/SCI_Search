@@ -8,342 +8,46 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
-import time
-import uuid
-from dataclasses import dataclass, field
 from typing import Any
 
-from paper_search.config import AppConfig, load_config
+from mcp.server.fastmcp import FastMCP
+
+from paper_search.config import load_config
 from paper_search.export import export_bibtex, export_json, export_markdown
-from paper_search.models import PaperCollection
-from paper_search.workflow.checkpoints import (
-    Checkpoint,
-    CheckpointKind,
-    Decision,
-    DecisionAction,
-    ResultPayload,
-    StrategyPayload,
-)
-from paper_search.workflow.engine import SearchWorkflow
-
-logger = logging.getLogger(__name__)
-
-_RESULT_PAYLOAD_MAX_PAPERS = 30
-
-
-# ---------------------------------------------------------------------------
-# Session infrastructure
-# ---------------------------------------------------------------------------
-
-
-def _serialize_checkpoint_payload(
-    checkpoint: Checkpoint,
-) -> dict[str, Any]:
-    """Serialize checkpoint payload for MCP client consumption."""
-    kind = checkpoint.kind
-    payload = checkpoint.payload
-
-    if kind == CheckpointKind.STRATEGY_CONFIRMATION:
-        if not isinstance(payload, StrategyPayload):
-            raise TypeError(
-                f"Expected StrategyPayload for {kind.value}, "
-                f"got {type(payload).__name__}"
-            )
-        return {
-            "intent": {
-                "topic": payload.intent.topic,
-                "concepts": payload.intent.concepts,
-                "intent_type": payload.intent.intent_type.value,
-                "constraints": payload.intent.constraints.model_dump(
-                    exclude_none=True, mode="json"
-                ),
-            },
-            "strategy": {
-                "queries": [
-                    {
-                        "keywords": q.keywords,
-                        "boolean_query": q.boolean_query,
-                    }
-                    for q in payload.strategy.queries
-                ],
-                "sources": payload.strategy.sources,
-                "filters": payload.strategy.filters.model_dump(
-                    exclude_none=True, mode="json"
-                ),
-            },
-        }
-
-    if kind == CheckpointKind.RESULT_REVIEW:
-        if not isinstance(payload, ResultPayload):
-            raise TypeError(
-                f"Expected ResultPayload for {kind.value}, "
-                f"got {type(payload).__name__}"
-            )
-        all_papers = payload.collection.papers
-        truncated = len(all_papers) > _RESULT_PAYLOAD_MAX_PAPERS
-        shown = all_papers[:_RESULT_PAYLOAD_MAX_PAPERS]
-        papers_summary = [
-            {
-                "id": p.id,
-                "doi": p.doi,
-                "title": p.title,
-                "authors": [a.name for a in p.authors],
-                "year": p.year,
-                "venue": p.venue,
-                "relevance_score": p.relevance_score,
-                "tags": [t.value for t in p.tags],
-            }
-            for p in shown
-        ]
-        return {
-            "papers": papers_summary,
-            "total_papers": len(all_papers),
-            "truncated": truncated,
-            "facets": payload.collection.facets.model_dump(mode="json"),
-            "accumulated_count": len(payload.accumulated_papers),
-        }
-
-    return {"_warning": "unsupported checkpoint kind", "raw_kind": kind.value}
-
-
-class MCPCheckpointHandler:
-    """CheckpointHandler that pauses workflow at checkpoints.
-
-    Uses asyncio.Event pairs to synchronize with external decide() calls.
-    """
-
-    def __init__(self) -> None:
-        self._checkpoint_ready = asyncio.Event()
-        self._decision_ready = asyncio.Event()
-        self._current_checkpoint: Checkpoint | None = None
-        self._decision: Decision | None = None
-
-    async def handle(self, checkpoint: Checkpoint) -> Decision:
-        """Block until an external caller provides a Decision."""
-        self._current_checkpoint = checkpoint
-        self._decision_ready.clear()
-        self._checkpoint_ready.set()
-        await self._decision_ready.wait()
-        self._checkpoint_ready.clear()
-        assert self._decision is not None
-        return self._decision
-
-    def set_decision(self, decision: Decision) -> None:
-        """Unblock handle() by providing a Decision."""
-        self._decision = decision
-        self._decision_ready.set()
-
-    @property
-    def current_checkpoint(self) -> Checkpoint | None:
-        return self._current_checkpoint
-
-    @property
-    def has_pending_checkpoint(self) -> bool:
-        return self._checkpoint_ready.is_set()
-
-    def checkpoint_signature(self) -> str | None:
-        """Return a stable signature for the currently pending checkpoint."""
-        if not self.has_pending_checkpoint or self._current_checkpoint is None:
-            return None
-        ckpt = self._current_checkpoint
-        return f"{ckpt.run_id}:{ckpt.iteration}:{ckpt.kind.value}"
-
-    async def wait_for_checkpoint(self, timeout: float = 60.0) -> bool:
-        """Wait until a checkpoint is ready or timeout."""
-        try:
-            await asyncio.wait_for(self._checkpoint_ready.wait(), timeout=timeout)
-            return True
-        except asyncio.TimeoutError:
-            return False
-
-
-@dataclass
-class WorkflowSession:
-    session_id: str
-    query: str
-    handler: MCPCheckpointHandler
-    task: asyncio.Task[Any] | None = None
-    result: PaperCollection | None = None
-    error: str | None = None
-    is_complete: bool = False
-    phase: str = "created"
-    phase_details: dict[str, Any] = field(default_factory=dict)
-    phase_updated_at: float = field(default_factory=time.time)
-    started_at: float = field(default_factory=time.time)
-    decide_wait_timeout_s: float = 15.0
-    poll_interval_s: float = 0.05
-
-
-class SessionManager:
-    """Manages workflow sessions for MCP tool interactions."""
-
-    def __init__(self) -> None:
-        self._sessions: dict[str, WorkflowSession] = {}
-
-    def create(self, query: str, config: AppConfig | None = None) -> str:
-        """Create a new workflow session and start it in the background."""
-        session_id = str(uuid.uuid4())
-        handler = MCPCheckpointHandler()
-        cfg = config or load_config()
-
-        session = WorkflowSession(
-            session_id=session_id,
-            query=query,
-            handler=handler,
-            decide_wait_timeout_s=max(0.1, cfg.mcp_decide_wait_timeout_s),
-            poll_interval_s=max(0.01, cfg.mcp_poll_interval_s),
-        )
-        self._update_progress(session, "starting", {})
-        session.task = asyncio.create_task(self._run_workflow(session, cfg))
-        self._sessions[session_id] = session
-        return session_id
-
-    def get(self, session_id: str) -> WorkflowSession | None:
-        return self._sessions.get(session_id)
-
-    async def wait_for_checkpoint_or_complete(
-        self, session_id: str, timeout: float = 120.0
-    ) -> dict[str, Any]:
-        """Wait until the session hits a checkpoint or completes."""
-        session = self._sessions.get(session_id)
-        if session is None:
-            return {"error": "Session not found"}
-
-        deadline = asyncio.get_event_loop().time() + timeout
-        while not session.handler.has_pending_checkpoint and not session.is_complete:
-            remaining = deadline - asyncio.get_event_loop().time()
-            if remaining <= 0:
-                return {"error": "Timeout waiting for workflow"}
-            await asyncio.sleep(session.poll_interval_s)
-
-        return self._session_state(session)
-
-    async def wait_after_decision(
-        self,
-        session_id: str,
-        previous_checkpoint_sig: str | None,
-        timeout: float,
-    ) -> dict[str, Any]:
-        """Wait for next checkpoint, completion, or timeout after a decision."""
-        session = self._sessions.get(session_id)
-        if session is None:
-            return {"error": "Session not found"}
-
-        deadline = asyncio.get_event_loop().time() + timeout
-        while True:
-            state = self._session_state(session)
-            if session.is_complete:
-                return state
-
-            current_sig = session.handler.checkpoint_signature()
-            if current_sig is not None and current_sig != previous_checkpoint_sig:
-                return state
-
-            if asyncio.get_event_loop().time() >= deadline:
-                return state
-
-            await asyncio.sleep(session.poll_interval_s)
-
-    def cleanup(self, session_id: str) -> None:
-        """Cancel and remove a session."""
-        session = self._sessions.pop(session_id, None)
-        if session and session.task and not session.task.done():
-            session.task.cancel()
-
-    def _update_progress(
-        self,
-        session: WorkflowSession,
-        phase: str,
-        details: dict[str, Any],
-    ) -> None:
-        session.phase = phase
-        session.phase_details = dict(details)
-        session.phase_updated_at = time.time()
-
-    def _session_state(self, session: WorkflowSession) -> dict[str, Any]:
-        """Build a state dict for the session."""
-        state: dict[str, Any] = {
-            "session_id": session.session_id,
-            "query": session.query,
-            "is_complete": session.is_complete,
-            "has_pending_checkpoint": session.handler.has_pending_checkpoint,
-            "phase": session.phase,
-            "phase_details": session.phase_details,
-            "phase_updated_at": session.phase_updated_at,
-            "elapsed_s": round(max(0.0, time.time() - session.started_at), 3),
-        }
-        if session.handler.has_pending_checkpoint and session.handler.current_checkpoint:
-            ckpt = session.handler.current_checkpoint
-            state["checkpoint_kind"] = ckpt.kind.value
-            state["checkpoint_id"] = f"{ckpt.run_id}:{ckpt.iteration}"
-            state["iteration"] = ckpt.iteration
-            state["checkpoint_payload"] = _serialize_checkpoint_payload(ckpt)
-            if ckpt.kind == CheckpointKind.STRATEGY_CONFIRMATION:
-                state["summary"] = "Strategy ready for review"
-            elif ckpt.kind == CheckpointKind.RESULT_REVIEW:
-                state["summary"] = "Results ready for review"
-            else:
-                state["summary"] = f"Checkpoint ready: {ckpt.kind.value}"
-        elif not session.is_complete:
-            state["summary"] = f"Workflow processing ({session.phase})"
-        if session.is_complete and session.result:
-            state["paper_count"] = len(session.result.papers)
-        if session.error:
-            state["error"] = session.error
-        return state
-
-    async def _run_workflow(
-        self, session: WorkflowSession, config: AppConfig
-    ) -> None:
-        """Run the workflow in background, capturing result or error."""
-        try:
-            wf = SearchWorkflow.from_config(
-                config,
-                checkpoint_handler=session.handler,
-                progress_reporter=lambda phase, details: self._update_progress(
-                    session, phase, details
-                ),
-            )
-            session.result = await wf.run(session.query)
-        except Exception as e:
-            logger.exception("Workflow error in session %s", session.session_id)
-            session.error = str(e)
-            self._update_progress(session, "error", {"message": str(e)})
-        finally:
-            session.is_complete = True
-            if session.error is None:
-                paper_count = len(session.result.papers) if session.result else 0
-                self._update_progress(
-                    session, "completed", {"paper_count": paper_count}
-                )
-
-
-# ---------------------------------------------------------------------------
-# MCP Tools
-# ---------------------------------------------------------------------------
-
-from mcp.server.fastmcp import FastMCP  # noqa: E402
+from paper_search.workflow.checkpoints import Decision, DecisionAction
+from paper_search.workflow.session import TRIVIAL_RESPONSES, SessionManager
 
 mcp = FastMCP(
     "paper-search",
     instructions=(
-        "Paper search workflow with human-in-the-loop checkpoints.\n"
+        "Paper search workflow with MANDATORY human-in-the-loop checkpoints.\n"
         "\n"
         "INTERACTION FLOW:\n"
-        "1. Call search_papers(query) → returns session_id + strategy_confirmation checkpoint\n"
-        "2. IMPORTANT: Present the strategy (intent + queries) to the USER for review\n"
-        "3. Ask the user to approve, edit, or reject. Then call decide(session_id, action)\n"
-        "4. Pipeline runs (searching → dedup → scoring → organizing) → returns result_review checkpoint\n"
-        "   If the pipeline is still running, use get_session(session_id) to poll progress\n"
-        "5. IMPORTANT: Present the papers list to the USER for review\n"
-        "6. Ask the user to approve, edit, or reject. Then call decide(session_id, action)\n"
-        "7. If approved → call export_results(session_id, format) for final output\n"
+        "1. Call search_papers(query) -> returns session_id + strategy_confirmation checkpoint\n"
+        "2. When the response contains 'user_action_required: true', you MUST:\n"
+        "   - Use the AskUserQuestion tool (if available) to present options to the user\n"
+        "   - The question should include the checkpoint summary from user_question\n"
+        "   - Options should map to: approve, edit, reject\n"
+        "   - If AskUserQuestion is not available, present the user_question text directly\n"
+        "   - Wait for the user's explicit decision\n"
+        "3. Call decide(session_id, action, user_response=<user's verbatim response>)\n"
+        "   The user_response parameter is REQUIRED and must contain the user's actual input.\n"
+        "4. Pipeline runs (searching -> dedup -> scoring -> organizing)\n"
+        "   If still running, use get_session(session_id) to poll progress\n"
+        "5. When result_review checkpoint arrives (user_action_required: true):\n"
+        "   - Use the AskUserQuestion tool (if available) to present options to the user\n"
+        "   - Include paper summary and facets in the question text\n"
+        "   - If AskUserQuestion is not available, present the user_question text directly\n"
+        "   - Wait for the user's decision\n"
+        "6. Call decide(session_id, action, user_response=<user's response>)\n"
+        "7. If approved -> call export_results(session_id, format) for final output\n"
         "\n"
         "CRITICAL RULES:\n"
-        "- Do NOT auto-approve checkpoints. Always present checkpoint data to the user and let them decide.\n"
-        "- The checkpoints exist specifically for human review and feedback.\n"
-        "- If the user rejects results, the pipeline iterates with refined queries automatically.\n"
+        "- Do NOT auto-approve checkpoints. ALWAYS present checkpoint data to the user.\n"
+        "- PREFER using AskUserQuestion tool over plain text for checkpoint interactions.\n"
+        "- The decide() tool REQUIRES a substantive user_response parameter.\n"
+        "- Trivial responses like 'ok', 'yes', 'approve' will be REJECTED by the server.\n"
+        "- You must relay the user_question to the user and collect their actual response.\n"
     ),
 )
 _session_manager = SessionManager()
@@ -365,6 +69,9 @@ async def search_papers(
     Returns JSON with session_id and a strategy_confirmation checkpoint containing:
     - intent: parsed topic, concepts, intent_type, constraints
     - strategy: generated search queries (keywords + boolean_query), sources, filters
+    - user_action_required: true when a checkpoint needs user review
+    - user_question: formatted question to present to the user
+    - user_options: available actions ["approve", "edit", "reject"]
 
     IMPORTANT: Present the checkpoint_payload to the user for review before calling decide().
     """
@@ -382,6 +89,7 @@ async def search_papers(
 async def decide(
     session_id: str,
     action: str,
+    user_response: str | None = None,
     data: dict[str, Any] | None = None,
     note: str | None = None,
 ) -> str:
@@ -390,6 +98,9 @@ async def decide(
     Args:
         session_id: Session ID from search_papers
         action: Decision action - "approve", "edit", or "reject"
+        user_response: REQUIRED - The user's verbatim response explaining their decision.
+            You MUST present the checkpoint to the user first and include their actual
+            response here. Trivial responses like "ok" or "yes" will be rejected.
         data: Optional revised data (SearchStrategy dict for strategy, UserFeedback dict for results)
         note: Optional note explaining the decision
 
@@ -417,6 +128,20 @@ async def decide(
         return json.dumps(
             {"error": f"Invalid action '{action}'. Must be one of: {valid_actions}"}
         )
+
+    if session.require_user_response:
+        if (
+            user_response is None
+            or user_response.strip().lower() in TRIVIAL_RESPONSES
+        ):
+            return json.dumps({
+                "error": (
+                    "user_response is required. You MUST present the checkpoint "
+                    "to the user and include their verbatim response. "
+                    "Trivial responses like 'ok' or 'yes' are not accepted."
+                ),
+                "hint": "Show the user_question from the checkpoint and ask for their decision.",
+            })
 
     previous_sig = session.handler.checkpoint_signature()
     decision = Decision(

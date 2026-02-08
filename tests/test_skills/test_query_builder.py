@@ -24,10 +24,13 @@ class MockLLM(LLMProvider):
         self._response = response
         self.last_user_msg: str = ""
 
-    async def complete(self, system_prompt: str, user_message: str) -> str:
+    def _error_map(self, exc: Exception) -> None:
+        return None
+
+    async def _call(self, system_prompt: str, user_message: str) -> str:
         return json.dumps(self._response) if isinstance(self._response, dict) else ""
 
-    async def complete_json(
+    async def _call_json(
         self, system_prompt: str, user_message: str, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         self.last_user_msg = user_message

@@ -31,13 +31,11 @@ class DecisionAction(str, Enum):
 class StrategyPayload(BaseModel):
     intent: ParsedIntent
     strategy: SearchStrategy
-    iteration: int
 
 
 class ResultPayload(BaseModel):
     collection: PaperCollection
     accumulated_papers: list[Paper] = Field(default_factory=list)
-    iteration: int
 
 
 class Checkpoint(BaseModel):

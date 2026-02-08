@@ -29,54 +29,37 @@ class ClaudeProvider(LLMProvider):
         self._temperature = config.temperature
         self._max_tokens = config.max_tokens
 
-    async def complete(self, system_prompt: str, user_message: str) -> str:
-        try:
-            response = await self._client.messages.create(
-                model=self._model,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_message}],
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-            )
-            return response.content[0].text
-        except anthropic.AuthenticationError as exc:
-            raise LLMAuthError(str(exc)) from exc
-        except anthropic.RateLimitError as exc:
-            raise LLMRateLimitError(str(exc)) from exc
-        except anthropic.APIError as exc:
-            raise LLMError(str(exc)) from exc
-        except LLMError:
-            raise
-        except Exception as exc:
-            raise LLMError(
-                f"Unexpected error from Anthropic-compatible API: {exc}"
-            ) from exc
+    def _error_map(self, exc: Exception) -> LLMError | None:
+        if isinstance(exc, anthropic.AuthenticationError):
+            return LLMAuthError(str(exc))
+        if isinstance(exc, anthropic.RateLimitError):
+            return LLMRateLimitError(str(exc))
+        if isinstance(exc, anthropic.APIError):
+            return LLMError(str(exc))
+        return None
 
-    async def complete_json(
+    async def _call(self, system_prompt: str, user_message: str) -> str:
+        response = await self._client.messages.create(
+            model=self._model,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+        )
+        return response.content[0].text
+
+    async def _call_json(
         self,
         system_prompt: str,
         user_message: str,
         schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        try:
-            response = await self._client.messages.create(
-                model=self._model,
-                system=system_prompt + _JSON_INSTRUCTION,
-                messages=[{"role": "user", "content": user_message}],
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-            )
-            text = response.content[0].text
-            return extract_json(text)
-        except anthropic.AuthenticationError as exc:
-            raise LLMAuthError(str(exc)) from exc
-        except anthropic.RateLimitError as exc:
-            raise LLMRateLimitError(str(exc)) from exc
-        except anthropic.APIError as exc:
-            raise LLMError(str(exc)) from exc
-        except LLMError:
-            raise
-        except Exception as exc:
-            raise LLMError(
-                f"Unexpected error from Anthropic-compatible API: {exc}"
-            ) from exc
+        response = await self._client.messages.create(
+            model=self._model,
+            system=system_prompt + _JSON_INSTRUCTION,
+            messages=[{"role": "user", "content": user_message}],
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+        )
+        text = response.content[0].text
+        return extract_json(text)

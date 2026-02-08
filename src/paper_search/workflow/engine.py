@@ -118,7 +118,6 @@ class SearchWorkflow:
                     payload=StrategyPayload(
                         intent=intent,
                         strategy=strategy,
-                        iteration=state.current_iteration,
                     ),
                     run_id=run_id,
                     iteration=state.current_iteration,
@@ -185,7 +184,6 @@ class SearchWorkflow:
                     payload=ResultPayload(
                         collection=collection,
                         accumulated_papers=list(state.accumulated_papers),
-                        iteration=state.current_iteration,
                     ),
                     run_id=run_id,
                     iteration=state.current_iteration,

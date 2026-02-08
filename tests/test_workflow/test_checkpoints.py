@@ -71,19 +71,17 @@ class TestDecisionAction:
 class TestStrategyPayload:
     def test_construction(self):
         p = StrategyPayload(
-            intent=_INTENT, strategy=_STRATEGY, iteration=0
+            intent=_INTENT, strategy=_STRATEGY
         )
         assert p.intent.topic == "test topic"
         assert p.strategy.sources == ["serpapi_scholar"]
-        assert p.iteration == 0
 
 
 class TestResultPayload:
     def test_construction(self):
-        p = ResultPayload(collection=_COLLECTION, iteration=1)
+        p = ResultPayload(collection=_COLLECTION)
         assert p.collection.metadata.total_found == 0
         assert p.accumulated_papers == []
-        assert p.iteration == 1
 
     def test_with_accumulated(self):
         paper = Paper(
@@ -92,7 +90,6 @@ class TestResultPayload:
         p = ResultPayload(
             collection=_COLLECTION,
             accumulated_papers=[paper],
-            iteration=2,
         )
         assert len(p.accumulated_papers) == 1
 
@@ -102,7 +99,7 @@ class TestCheckpoint:
         ckpt = Checkpoint(
             kind=CheckpointKind.STRATEGY_CONFIRMATION,
             payload=StrategyPayload(
-                intent=_INTENT, strategy=_STRATEGY, iteration=0
+                intent=_INTENT, strategy=_STRATEGY
             ),
         )
         # run_id is a valid UUID string
@@ -114,7 +111,7 @@ class TestCheckpoint:
     def test_explicit_fields(self):
         ckpt = Checkpoint(
             kind=CheckpointKind.RESULT_REVIEW,
-            payload=ResultPayload(collection=_COLLECTION, iteration=0),
+            payload=ResultPayload(collection=_COLLECTION),
             run_id="custom-id",
             iteration=3,
         )

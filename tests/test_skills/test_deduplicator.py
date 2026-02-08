@@ -18,10 +18,13 @@ class MockDedupLLM(LLMProvider):
         self._response = response
         self.call_count = 0
 
-    async def complete(self, system_prompt: str, user_message: str) -> str:
+    def _error_map(self, exc: Exception) -> None:
+        return None
+
+    async def _call(self, system_prompt: str, user_message: str) -> str:
         return ""
 
-    async def complete_json(
+    async def _call_json(
         self, system_prompt: str, user_message: str, schema: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         self.call_count += 1

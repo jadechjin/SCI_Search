@@ -22,12 +22,15 @@ class MockLLMProvider(LLMProvider):
     def __init__(self, json_response: dict[str, Any] | str | None = None) -> None:
         self._response = json_response
 
-    async def complete(self, system_prompt: str, user_message: str) -> str:
+    def _error_map(self, exc: Exception) -> None:
+        return None
+
+    async def _call(self, system_prompt: str, user_message: str) -> str:
         if isinstance(self._response, dict):
             return json.dumps(self._response)
         return self._response or ""
 
-    async def complete_json(
+    async def _call_json(
         self,
         system_prompt: str,
         user_message: str,

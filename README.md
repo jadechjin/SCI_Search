@@ -1,118 +1,130 @@
 # paper-search
 
-AI 驱动的学术论文搜索工作流系统。通过自然语言描述研究需求，自动完成意图解析、查询构建、多源搜索、去重、相关性评分和结果整理。
+AI-powered academic paper search workflow system. Describe your research needs in natural language, and the system automatically handles intent parsing, query construction, multi-source search, deduplication, relevance scoring, and result organization.
 
-## 系统架构
+**English** | [中文](./README.zh-CN.md)
+
+## Features
+
+- **Natural Language Input** - Describe what you're looking for in plain language
+- **Multi-LLM Support** - OpenAI, Anthropic Claude, Google Gemini with unified interface
+- **Human-in-the-Loop** - Checkpoint system for strategy approval and result review
+- **Iterative Refinement** - Reject or edit results to trigger refined searches with feedback
+- **Domain Specialization** - Built-in support for materials science terminology
+- **Multiple Interfaces** - Python library, CLI, MCP server for AI agent integration
+- **Export Formats** - JSON, BibTeX, Markdown
+
+## Architecture
 
 ```
-用户查询 (自然语言)
-    │
-    ▼
-┌──────────────┐
-│ IntentParser │  ← LLM 解析研究意图
-└──────┬───────┘
-       ▼
-┌──────────────┐     ┌─────────────────────────┐
-│ QueryBuilder │ ──▶ │ Checkpoint 1: 策略确认   │ (可选)
-└──────┬───────┘     └─────────────────────────┘
-       ▼
-┌──────────────┐
-│   Searcher   │  ← SerpAPI Google Scholar
-└──────┬───────┘
-       ▼
-┌──────────────┐
-│ Deduplicator │  ← DOI / URL / 标题 去重
-└──────┬───────┘
-       ▼
-┌────────────────┐
-│RelevanceScorer │  ← LLM 批量评分
-└──────┬─────────┘
-       ▼
-┌────────────────┐     ┌─────────────────────────┐
-│ResultOrganizer │ ──▶ │ Checkpoint 2: 结果审查   │ (必选)
-└──────┬─────────┘     └─────────────────────────┘
-       ▼
-  PaperCollection (最终结果)
+User Query (natural language)
+    |
+    v
++----------------+
+|  IntentParser  |  <- LLM parses research intent
++-------+--------+
+        v
++----------------+     +----------------------------+
+|  QueryBuilder  | --> | Checkpoint 1: Strategy     | (optional)
++-------+--------+     +----------------------------+
+        v
++----------------+
+|    Searcher    |  <- SerpAPI Google Scholar
++-------+--------+
+        v
++----------------+
+|  Deduplicator  |  <- DOI / URL / title dedup + LLM semantic matching
++-------+--------+
+        v
++------------------+
+| RelevanceScorer  |  <- LLM batch scoring with controlled concurrency
++-------+----------+
+        v
++------------------+     +----------------------------+
+| ResultOrganizer  | --> | Checkpoint 2: Result Review | (required)
++-------+----------+     +----------------------------+
+        v
+  PaperCollection (final results)
 ```
 
-支持 **迭代搜索**：在结果审查阶段可以 reject/edit 触发新一轮搜索，用户反馈会传递给 QueryBuilder 优化下一轮查询。
+At the result review checkpoint, you can **reject** or **edit** to trigger a new search iteration. User feedback is passed to QueryBuilder to refine the next round.
 
-## 安装
+## Installation
 
 ```bash
-# 克隆项目
 git clone <repo-url>
 cd workflow
 
-# 使用 uv 安装依赖
+# Install dependencies with uv
 uv sync
 
-# 如需 MCP Server 功能
+# For MCP server support
 uv sync --extra mcp
 ```
 
-## 配置
+**Requirements:** Python >= 3.11
 
-复制 `.env.example` 为 `.env` 并填入 API Key：
+## Configuration
+
+Copy `.env.example` to `.env` and fill in your API keys:
 
 ```bash
 cp .env.example .env
 ```
 
-必要配置：
+### Required
 
-| 环境变量 | 说明 | 示例 |
-|---------|------|------|
-| `SERPAPI_API_KEY` | SerpAPI 密钥 (Google Scholar 搜索) | `abc123...` |
-| `LLM_PROVIDER` | LLM 提供商 | `openai` / `anthropic` / `gemini` |
-| `OPENAI_API_KEY` | OpenAI API Key (当 provider=openai) | `sk-...` |
-| `ANTHROPIC_API_KEY` | Anthropic API Key (当 provider=anthropic) | `sk-ant-...` |
-| `GOOGLE_API_KEY` | Google API Key (当 provider=gemini) | `AIza...` |
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `SERPAPI_API_KEY` | SerpAPI key (Google Scholar) | `abc123...` |
+| `LLM_PROVIDER` | LLM provider | `openai` / `anthropic` / `gemini` |
+| `OPENAI_API_KEY` | OpenAI API key (when provider=openai) | `sk-...` |
+| `ANTHROPIC_API_KEY` | Anthropic API key (when provider=anthropic) | `sk-ant-...` |
+| `GOOGLE_API_KEY` | Google API key (when provider=gemini) | `AIza...` |
 
-可选配置：
+### Optional
 
-| 环境变量 | 默认值 | 说明 |
-|---------|--------|------|
-| `LLM_MODEL` | (provider 默认) | 指定模型名称 |
-| `LLM_TEMPERATURE` | `0.0` | LLM 温度参数 |
-| `LLM_MAX_TOKENS` | `4096` | 最大输出 token 数 |
-| `DEFAULT_MAX_RESULTS` | `100` | 默认最大结果数 |
-| `DOMAIN` | `general` | 研究领域 (`general` 或 `materials_science`) |
-| `LLM_BASE_URL` | (无) | 自定义 LLM 端点 (兼容 OpenAI API 的服务) |
-| `RELEVANCE_BATCH_SIZE` | `10` | 相关性评分批大小 |
-| `RELEVANCE_MAX_CONCURRENCY` | `3` | 相关性评分并发上限 |
-| `DEDUP_ENABLE_LLM_PASS` | `true` | 是否启用 LLM 语义去重 |
-| `DEDUP_LLM_MAX_CANDIDATES` | `60` | 语义去重最大候选数（超过则跳过 LLM pass） |
-| `MCP_DECIDE_WAIT_TIMEOUT_S` | `15.0` | `decide()` 等待“下一状态”的最长秒数 |
-| `MCP_POLL_INTERVAL_S` | `0.05` | MCP 会话轮询间隔（秒） |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LLM_MODEL` | provider default | Model name |
+| `LLM_TEMPERATURE` | `0.0` | LLM temperature |
+| `LLM_MAX_TOKENS` | `4096` | Max output tokens |
+| `LLM_BASE_URL` | - | Custom endpoint (OpenAI-compatible proxy) |
+| `DEFAULT_MAX_RESULTS` | `100` | Max results per search |
+| `DOMAIN` | `general` | Research domain (`general` or `materials_science`) |
 
-## 使用方式
+### Performance Tuning
 
-### 1. Python Library (推荐)
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RELEVANCE_BATCH_SIZE` | `10` | Papers per scoring batch |
+| `RELEVANCE_MAX_CONCURRENCY` | `3` | Max concurrent scoring batches |
+| `DEDUP_ENABLE_LLM_PASS` | `true` | Enable LLM semantic dedup |
+| `DEDUP_LLM_MAX_CANDIDATES` | `60` | Skip LLM dedup if candidates exceed this |
+| `MCP_DECIDE_WAIT_TIMEOUT_S` | `15.0` | Max seconds to wait for next state in `decide()` |
+| `MCP_POLL_INTERVAL_S` | `0.05` | MCP session poll interval (seconds) |
 
-最简单的使用方式 —— 一行调用完成全流程搜索：
+## Usage
+
+### Python Library
+
+One-line search with auto-approval of all checkpoints:
 
 ```python
 import asyncio
 from paper_search import search, export_markdown, export_json, export_bibtex
 
 async def main():
-    # 一行搜索 (自动审批所有 checkpoint)
     results = await search("perovskite solar cells efficiency 2020-2024")
 
-    # 导出为 Markdown 表格
-    print(export_markdown(results))
-
-    # 导出为 JSON
-    json_str = export_json(results)
-
-    # 导出为 BibTeX (可直接导入 LaTeX)
-    bibtex_str = export_bibtex(results)
+    print(export_markdown(results))   # Markdown table
+    json_str = export_json(results)   # Structured JSON
+    bib_str = export_bibtex(results)  # BibTeX for LaTeX
 
 asyncio.run(main())
 ```
 
-**自定义配置：**
+Custom configuration:
 
 ```python
 from paper_search import search
@@ -133,68 +145,54 @@ config = AppConfig(
     domain="materials_science",
 )
 
-results = await search("锂离子电池正极材料", config=config)
+results = await search("lithium-ion battery cathode materials", config=config)
 ```
 
-**访问结果数据：**
+Accessing result data:
 
 ```python
 results = await search("graphene thermal conductivity")
 
-# 结果元数据
-print(f"共找到 {results.metadata.total_found} 篇论文")
+print(f"Found {results.metadata.total_found} papers")
 
-# 遍历论文
 for paper in results.papers:
     print(f"[{paper.relevance_score:.2f}] {paper.title}")
-    print(f"  作者: {', '.join(a.name for a in paper.authors)}")
-    print(f"  年份: {paper.year}  期刊: {paper.venue}")
+    print(f"  Authors: {', '.join(a.name for a in paper.authors)}")
+    print(f"  Year: {paper.year}  Venue: {paper.venue}")
     if paper.doi:
         print(f"  DOI: {paper.doi}")
 
-# 分面统计
-print(f"年份分布: {results.facets.by_year}")
-print(f"期刊分布: {results.facets.by_venue}")
-print(f"高频作者: {results.facets.top_authors}")
-print(f"关键主题: {results.facets.key_themes}")
+# Facet statistics
+print(f"By year: {results.facets.by_year}")
+print(f"By venue: {results.facets.by_venue}")
+print(f"Top authors: {results.facets.top_authors}")
+print(f"Key themes: {results.facets.key_themes}")
 ```
 
-### 2. 带人工审查的高级用法
+### Custom Checkpoint Handler
 
-如需在搜索过程中介入审查，使用 `SearchWorkflow` + 自定义 `CheckpointHandler`：
+For human-in-the-loop control during search:
 
 ```python
-import asyncio
 from paper_search.config import load_config
 from paper_search.workflow import SearchWorkflow
 from paper_search.workflow.checkpoints import (
-    Checkpoint, CheckpointHandler, CheckpointKind,
-    Decision, DecisionAction,
+    Checkpoint, CheckpointKind, Decision, DecisionAction,
 )
 
 class MyHandler:
-    """自定义 checkpoint handler 示例。"""
-
     async def handle(self, checkpoint: Checkpoint) -> Decision:
         if checkpoint.kind == CheckpointKind.STRATEGY_CONFIRMATION:
-            # 查看搜索策略
             strategy = checkpoint.payload.strategy
-            print(f"搜索策略: {len(strategy.queries)} 条查询")
+            print(f"Strategy: {len(strategy.queries)} queries")
             for q in strategy.queries:
                 print(f"  - {q.boolean_query}")
-
-            # 批准策略
             return Decision(action=DecisionAction.APPROVE)
 
         elif checkpoint.kind == CheckpointKind.RESULT_REVIEW:
-            # 查看搜索结果
             collection = checkpoint.payload.collection
-            print(f"找到 {len(collection.papers)} 篇论文")
-
-            # 可以选择:
-            # - APPROVE: 接受结果
-            # - REJECT: 拒绝并重新搜索 (附带反馈)
-            # - EDIT: 修改后继续
+            print(f"Found {len(collection.papers)} papers")
+            # APPROVE to accept, REJECT/EDIT to iterate
             return Decision(action=DecisionAction.APPROVE)
 
 config = load_config()
@@ -202,32 +200,25 @@ wf = SearchWorkflow.from_config(config, checkpoint_handler=MyHandler())
 results = await wf.run("high-entropy alloys mechanical properties")
 ```
 
-### 3. MCP Server (Agent 集成)
+### MCP Server
 
-将搜索能力暴露为 MCP 工具，供 Claude 等 AI Agent 调用：
+Expose search as MCP tools for Claude and other AI agents:
 
 ```bash
-# 安装 MCP 依赖
 uv sync --extra mcp
 
-# 启动 MCP Server (STDIO 传输) — 两种方式
-uv run paper-search-mcp              # 方式 1: 通过 uv run
-.venv/Scripts/paper-search-mcp       # 方式 2: 直接调用 venv 中的脚本
+# Start MCP server (STDIO transport)
+uv run paper-search-mcp
 ```
 
-> **注意**: `paper-search-mcp` 安装在项目的 `.venv/Scripts/` 目录中，不在系统 PATH 上。
-> 直接运行 `paper-search-mcp` 会报 "无法识别" 错误，需要用上面两种方式之一。
-
-在 Claude Desktop 的 `claude_desktop_config.json` 中配置：
-
-**直连官方 API（不需要 base_url）：**
+Claude Desktop configuration (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "paper-search": {
       "command": "uv",
-      "args": ["run", "--directory", "C:/Users/17162/Desktop/Terms/workflow", "paper-search-mcp"],
+      "args": ["run", "--directory", "/path/to/workflow", "paper-search-mcp"],
       "env": {
         "SERPAPI_API_KEY": "your-key",
         "LLM_PROVIDER": "openai",
@@ -238,162 +229,71 @@ uv run paper-search-mcp              # 方式 1: 通过 uv run
 }
 ```
 
-**使用第三方代理 / 兼容 OpenAI 格式的服务：**
+For OpenAI-compatible proxies, add `"LLM_BASE_URL": "https://your-proxy.example.com/v1"` to `env`.
 
-```json
-{
-  "mcpServers": {
-    "paper-search": {
-      "command": "uv",
-      "args": ["run", "--directory", "C:/Users/17162/Desktop/Terms/workflow", "paper-search-mcp"],
-      "env": {
-        "SERPAPI_API_KEY": "your-key",
-        "LLM_PROVIDER": "openai",
-        "OPENAI_API_KEY": "your-key",
-        "LLM_BASE_URL": "https://your-proxy.example.com/v1"
-      }
-    }
-  }
-}
-```
+**MCP Tools:**
 
-也可以直接用 venv 中的 Python 启动（不依赖 uv）：
+| Tool | Description |
+|------|-------------|
+| `search_papers(query, domain?, max_results?)` | Start search, returns session_id + first checkpoint |
+| `decide(session_id, action, data?, note?)` | Submit checkpoint decision (approve/edit/reject) |
+| `export_results(session_id, format?)` | Export results (json/bibtex/markdown) |
+| `get_session(session_id)` | Query session status and progress |
 
-```json
-{
-  "mcpServers": {
-    "paper-search": {
-      "command": "C:/Users/17162/Desktop/Terms/workflow/.venv/Scripts/python",
-      "args": ["-m", "paper_search.mcp_server"],
-      "env": {
-        "SERPAPI_API_KEY": "your-key",
-        "LLM_PROVIDER": "openai",
-        "OPENAI_API_KEY": "sk-..."
-      }
-    }
-  }
-}
-```
-
-> 三个 provider（openai / anthropic / gemini）都支持 `LLM_BASE_URL`。官方 API 无需设置，SDK 使用默认端点。
-
-MCP Server 提供 4 个工具：
-
-| 工具 | 说明 |
-|------|------|
-| `search_papers(query, domain?, max_results?)` | 发起搜索，返回 session_id + 第一个 checkpoint（含 payload） |
-| `decide(session_id, action, data?, note?)` | 对 checkpoint 做决策 (approve/edit/reject)，返回下一状态（含 payload） |
-| `export_results(session_id, format?)` | 导出完成的搜索结果 (json/bibtex/markdown) |
-| `get_session(session_id)` | 查询 session 状态（含 checkpoint payload） |
-
-**Agent 交互流程：**
+**Agent interaction flow:**
 
 ```
 Agent                                    MCP Server
-  │                                          │
-  ├─ search_papers("...") ─────────────────▶│
-  │                                          │── 启动后台工作流
-  │◀─ {session_id, checkpoint_payload: {   ─┤
-  │      intent: {...}, strategy: {...}      │
-  │   }} ─────────────────────────────────── │
-  │                                          │
-  │  (Agent 审阅 strategy 后决策)            │
-  ├─ decide(sid, "approve") ───────────────▶│
-  │                                          │── 继续执行流水线
-  │◀─ {checkpoint_payload: {               ─┤
-  │      papers: [...], total_papers: 95,    │
-  │      truncated: true, facets: {...}      │
-  │   }} ─────────────────────────────────── │
-  │                                          │
-  │  (Agent 审阅 papers 后决策)              │
-  ├─ decide(sid, "approve") ───────────────▶│
-  │                                          │── 完成
-  │◀─ {is_complete: true, paper_count: 95} ─┤
-  │                                          │
-  ├─ export_results(sid, "bibtex") ────────▶│
-  │◀─ BibTeX 内容 ──────────────────────────┤
+  |                                          |
+  +- search_papers("...") ------------------>|
+  |                                          |-- starts background workflow
+  |<- {session_id, checkpoint_payload: {   --|
+  |      intent: {...}, strategy: {...}      |
+  |   }} ----------------------------------- |
+  |                                          |
+  |  (Agent reviews strategy, decides)       |
+  +- decide(sid, "approve") ---------------->|
+  |                                          |-- pipeline continues
+  |<- {checkpoint_payload: {               --|
+  |      papers: [...], facets: {...}        |
+  |   }} ----------------------------------- |
+  |                                          |
+  |  (Agent reviews results, decides)        |
+  +- decide(sid, "approve") ---------------->|
+  |                                          |-- complete
+  |<- {is_complete: true} ------------------|
+  |                                          |
+  +- export_results(sid, "bibtex") --------->|
+  |<- BibTeX content ---------------------- |
 ```
 
-**Checkpoint Payload 结构：**
+### CLI
 
-strategy_confirmation 返回：
-
-```json
-{
-  "checkpoint_payload": {
-    "intent": {
-      "topic": "perovskite solar cells",
-      "concepts": ["perovskite", "solar cell", "efficiency"],
-      "intent_type": "survey",
-      "constraints": {"max_results": 100}
-    },
-    "strategy": {
-      "queries": [
-        {"keywords": ["perovskite", "solar cell"], "boolean_query": "..."}
-      ],
-      "sources": ["serpapi_scholar"],
-      "filters": {"max_results": 100}
-    }
-  },
-  "checkpoint_id": "uuid:0",
-  "checkpoint_kind": "strategy_confirmation"
-}
-```
-
-result_review 返回（默认最多 30 篇摘要，超出截断）：
-
-```json
-{
-  "checkpoint_payload": {
-    "papers": [
-      {
-        "id": "...", "doi": "10.1234/...", "title": "...",
-        "authors": ["Author1"], "year": 2024,
-        "venue": "Nature", "relevance_score": 0.95,
-        "tags": ["method"]
-      }
-    ],
-    "total_papers": 95,
-    "truncated": true,
-    "facets": {"by_year": {"2024": 50}, "by_venue": {...}},
-    "accumulated_count": 0
-  },
-  "checkpoint_id": "uuid:0",
-  "checkpoint_kind": "result_review"
-}
-```
-
-### 4. Dev CLI (开发调试)
-
-最小化命令行入口，用于快速测试：
+Minimal command-line entry point for quick testing (auto-approves all checkpoints):
 
 ```bash
 python -m paper_search "perovskite solar cells"
 ```
 
-输出 Markdown 格式的结果表格。自动审批所有 checkpoint。
-
-## 导出格式
+## Export Formats
 
 ### JSON
 
-完整的结构化数据，包含论文、元数据和分面统计：
+Full structured data with papers, metadata, and facet statistics:
 
 ```python
 from paper_search import export_json
-json_str = export_json(results)  # indent=2
+json_str = export_json(results)
 ```
 
 ### BibTeX
 
-可直接导入 LaTeX 的参考文献格式：
+Reference format for LaTeX:
 
 ```python
 from paper_search import export_bibtex
 bibtex_str = export_bibtex(results)
 ```
-
-输出示例：
 
 ```bibtex
 @article{wang_2023_perovskite,
@@ -407,14 +307,12 @@ bibtex_str = export_bibtex(results)
 
 ### Markdown
 
-表格格式，适合展示和分享：
+Table format for sharing:
 
 ```python
 from paper_search import export_markdown
 md_str = export_markdown(results)
 ```
-
-输出示例：
 
 ```
 | # | Title | Authors | Year | Venue | Score |
@@ -422,173 +320,110 @@ md_str = export_markdown(results)
 | 1 | Perovskite Solar Cells | Wang Lei, Zhang Wei | 2023 | Nature Energy | 0.95 |
 ```
 
-## 核心数据模型
+## Data Models
 
 ```python
-# 论文
 class Paper:
     id: str
     title: str
-    authors: list[Author]      # Author(name, author_id?)
+    authors: list[Author]       # Author(name, author_id?)
     year: int | None
     venue: str | None
     doi: str | None
-    source: str                 # 来源 (如 "serpapi_scholar")
-    relevance_score: float      # 0.0 ~ 1.0
+    source: str                  # e.g. "serpapi_scholar"
+    relevance_score: float       # 0.0 ~ 1.0
     relevance_reason: str
-    tags: list[PaperTag]        # method/review/empirical/theoretical/dataset
+    tags: list[PaperTag]         # method / review / empirical / theoretical / dataset
     citation_count: int
     full_text_url: str | None
 
-# 搜索结果集合
 class PaperCollection:
-    metadata: SearchMetadata    # 查询信息、策略、总数
-    papers: list[Paper]         # 论文列表 (按相关性排序)
-    facets: Facets              # 分面: by_year, by_venue, top_authors, key_themes
+    metadata: SearchMetadata     # query info, strategy, total count
+    papers: list[Paper]          # sorted by relevance
+    facets: Facets               # by_year, by_venue, top_authors, key_themes
 
-# 搜索策略
 class SearchStrategy:
-    queries: list[SearchQuery]  # 布尔查询列表
-    sources: list[str]          # 搜索源列表
-    filters: SearchConstraints  # 年份范围、语言等
+    queries: list[SearchQuery]   # boolean query list
+    sources: list[str]
+    filters: SearchConstraints   # year range, language, etc.
 
-# 解析后的意图
 class ParsedIntent:
-    topic: str                  # 研究主题
-    concepts: list[str]         # 核心概念
-    intent_type: IntentType     # survey/method/dataset/baseline
+    topic: str
+    concepts: list[str]
+    intent_type: IntentType      # survey / method / dataset / baseline
     constraints: SearchConstraints
 ```
 
-## 研究领域
+## Domain Specialization
 
-系统支持领域特化的提示词模板：
+The system supports domain-specific prompt templates:
 
-- **`general`** — 通用学术搜索 (默认)
-- **`materials_science`** — 材料科学领域，包含专业术语同义词映射和领域知识
+- **`general`** - General academic search (default)
+- **`materials_science`** - Materials science with specialized terminology mapping and domain knowledge
 
-通过 `DOMAIN` 环境变量或 `config.domain` 参数配置。
+Configure via `DOMAIN` environment variable or `config.domain` parameter.
 
-## 运行测试
+## Project Structure
+
+```
+src/paper_search/
+├── __init__.py              # Public API: search(), export_*
+├── __main__.py              # CLI entry point
+├── config.py                # Configuration (.env loading)
+├── export.py                # Export (JSON / BibTeX / Markdown)
+├── mcp_server.py            # MCP Server (4 tools)
+├── models.py                # Pydantic data models
+├── llm/                     # LLM providers
+│   ├── base.py              # Abstract LLMProvider
+│   ├── openai_provider.py
+│   ├── claude_provider.py
+│   ├── gemini_provider.py
+│   ├── factory.py           # Provider factory
+│   ├── json_utils.py        # JSON extraction (3-step fallback)
+│   └── exceptions.py        # Error hierarchy
+├── prompts/                 # Prompt templates
+│   ├── intent_parsing.py
+│   ├── query_building.py
+│   ├── relevance_scoring.py
+│   ├── dedup.py
+│   └── domains/             # Domain specialization
+│       └── materials_science.py
+├── skills/                  # Core pipeline skills
+│   ├── intent_parser.py     # NL -> ParsedIntent
+│   ├── query_builder.py     # Intent -> SearchStrategy
+│   ├── searcher.py          # Strategy -> RawPaper[]
+│   ├── deduplicator.py      # Algorithmic + LLM dedup
+│   ├── relevance_scorer.py  # Concurrent batch scoring
+│   └── result_organizer.py  # Filter, sort, facets
+├── sources/                 # Search source adapters
+│   ├── base.py              # Abstract SearchSource
+│   ├── serpapi_scholar.py   # Google Scholar via SerpAPI
+│   ├── factory.py
+│   └── exceptions.py
+└── workflow/                # Orchestration
+    ├── engine.py            # SearchWorkflow (main pipeline)
+    ├── checkpoints.py       # Checkpoint / Decision models
+    └── state.py             # Iteration state management
+```
+
+## Testing
 
 ```bash
 uv run pytest tests/ -v
 ```
 
-当前共 195 个测试用例，覆盖全部模块。
+213 tests covering all modules: models, LLM providers, SerpAPI adapter, all 6 skills, workflow engine, checkpoints, export, library API, MCP server, and CLI.
 
-## 项目结构
+## Dependencies
 
-```
-src/paper_search/
-├── __init__.py          # 公共 API: search(), export_*
-├── __main__.py          # Dev CLI 入口
-├── config.py            # 配置加载 (.env)
-├── export.py            # 导出工具 (JSON/BibTeX/Markdown)
-├── mcp_server.py        # MCP Server (4 tools)
-├── models.py            # Pydantic 数据模型
-├── llm/                 # LLM 提供商
-│   ├── openai_provider.py
-│   ├── claude_provider.py
-│   ├── gemini_provider.py
-│   ├── factory.py       # 提供商工厂
-│   └── json_utils.py    # JSON 提取工具
-├── prompts/             # 提示词模板
-│   ├── intent_parsing.py
-│   ├── query_building.py
-│   ├── relevance_scoring.py
-│   ├── dedup.py
-│   └── domains/         # 领域特化配置
-├── skills/              # 核心技能
-│   ├── intent_parser.py
-│   ├── query_builder.py
-│   ├── searcher.py
-│   ├── deduplicator.py
-│   ├── relevance_scorer.py
-│   └── result_organizer.py
-├── sources/             # 搜索源适配器
-│   └── serpapi_scholar.py
-└── workflow/            # 工作流编排
-    ├── engine.py        # SearchWorkflow 主引擎
-    ├── checkpoints.py   # Checkpoint/Decision 模型
-    └── state.py         # 迭代状态管理
-```
-
-## 依赖
-
-- Python >= 3.11
-- pydantic >= 2.0
-- httpx
-- openai / anthropic / google-genai (LLM 提供商)
-- google-search-results (SerpAPI)
-- mcp >= 1.22 (可选，MCP Server)
-
-## 架构映射：本次优化改动
-
-以下按源码架构说明本次改动的职责与作用，便于对照代码快速定位：
-
-### 1) `src/paper_search/mcp_server.py`（MCP 会话与人机交互）
-- 修复 `decide()` 竞态：提交决策后等待“下一 checkpoint / 完成 / 超时”，避免返回旧的 `strategy_confirmation`。
-- 新增 checkpoint 签名（`run_id + iteration + kind`）用于判断是否真正进入下一状态。
-- 会话状态新增进度字段：`phase`、`phase_details`、`phase_updated_at`、`elapsed_s`。
-- 当没有 pending checkpoint 但流程仍在运行时，`get_session` 返回 processing 摘要，避免“看起来卡住”。
-
-### 2) `src/paper_search/workflow/engine.py`（主编排引擎）
-- 新增 `progress_reporter` 回调，将阶段进度上报给 MCP 会话层。
-- 覆盖阶段：`intent_parsing`、`query_building`、`searching`、`deduplicating`、`scoring`、`organizing`、`waiting_checkpoint`、`iterating`、`completed`。
-- `from_config()` 接入性能相关配置，并传递给 `Deduplicator` 与 `RelevanceScorer`。
-
-### 3) `src/paper_search/skills/relevance_scorer.py`（相关性评分）
-- 从串行 batch 改为受控并发 batch 评分，保持输出顺序不变。
-- 新增参数 `max_concurrency`，用于限制并发请求上限，降低总耗时。
-
-### 4) `src/paper_search/skills/deduplicator.py`（去重）
-- 增加 `enable_llm_pass` 开关，可按环境关闭语义去重。
-- 增加 `llm_max_candidates` 阈值，候选过大时跳过 LLM pass，避免大结果集长尾耗时。
-- 算法去重（DOI/result_id/url/title）仍保持第一阶段默认执行。
-
-### 5) `src/paper_search/config.py` 与 `.env.example`（配置层）
-- 增加运行调优参数：
-  - `RELEVANCE_BATCH_SIZE`
-  - `RELEVANCE_MAX_CONCURRENCY`
-  - `DEDUP_ENABLE_LLM_PASS`
-  - `DEDUP_LLM_MAX_CANDIDATES`
-  - `MCP_DECIDE_WAIT_TIMEOUT_S`
-  - `MCP_POLL_INTERVAL_S`
-- `load_config()` 统一读取并注入到 workflow 与 MCP 会话策略。
-
-### 6) 回归测试覆盖
-- `tests/test_mcp_server.py`
-  - `decide()` 不返回旧 checkpoint（单调推进）验证。
-  - 会话进度字段返回验证。
-  - checkpoint payload 序列化形状与字段完整性验证。
-  - payload JSON 可序列化验证。
-  - result payload 截断行为验证。
-  - payload 类型不匹配时的 TypeError 验证。
-  - `get_session` / `decide` 返回 `checkpoint_payload` 与 `checkpoint_id` 验证。
-- `tests/test_skills/test_relevance_scorer.py`
-  - 并发评分行为验证。
-- `tests/test_skills/test_deduplicator.py`
-  - LLM 去重阈值与开关行为验证。
-
-### 7) `src/paper_search/mcp_server.py` — Checkpoint Payload 回传（v0.1.3）
-
-**问题**：MCP 客户端在 checkpoint 阶段只收到元数据（`checkpoint_kind`、`summary`），无法看到待审阅的策略或论文内容，人工介入形同虚设。
-
-**方案**：新增 `_serialize_checkpoint_payload()` 辅助函数，在 `_session_state()` 中将 payload 序列化后注入响应。
-
-实现护栏：
-- 不用 `assert` 做运行时校验 —— 使用 `raise TypeError(...)` + 明确错误信息。
-- 不写死 `else = ResultPayload` —— `if/elif/else` 三分支，未知 checkpoint kind 返回 `_warning`。
-- `model_dump()` 统一使用 `mode="json"`，避免 enum/datetime 等非原生 JSON 类型穿透。
-- Result payload 截断保护 —— `_RESULT_PAYLOAD_MAX_PAPERS=30`，超出时 `truncated=true` + `total_papers` 标注实际总量。
-- papers 摘要包含 `doi` 字段，避免下游 agent 二次抓取。
-- 会话状态新增 `checkpoint_id`（`run_id:iteration`），为客户端提供稳定的代次标识。
-
-影响范围：
-- `search_papers` / `decide` / `get_session` 三个工具自动获益（均通过 `_session_state()` 返回）。
-- `export_results` 不受影响。
-- 新增字段均为追加，向后兼容。
+- **pydantic** >= 2.0 - Data validation
+- **httpx** - HTTP client
+- **Python-dotenv** - Environment configuration
+- **openai** - OpenAI provider
+- **anthropic** - Claude provider
+- **google-genai** - Gemini provider
+- **google-search-results** - SerpAPI client
+- **mcp** >= 1.22 - MCP server (optional)
 
 ## License
 

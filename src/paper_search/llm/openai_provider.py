@@ -24,59 +24,42 @@ class OpenAIProvider(LLMProvider):
         self._temperature = config.temperature
         self._max_tokens = config.max_tokens
 
-    async def complete(self, system_prompt: str, user_message: str) -> str:
-        try:
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-            )
-            return response.choices[0].message.content or ""
-        except openai.AuthenticationError as exc:
-            raise LLMAuthError(str(exc)) from exc
-        except openai.RateLimitError as exc:
-            raise LLMRateLimitError(str(exc)) from exc
-        except openai.APIError as exc:
-            raise LLMError(str(exc)) from exc
-        except LLMError:
-            raise
-        except Exception as exc:
-            raise LLMError(
-                f"Unexpected error from OpenAI-compatible API: {exc}"
-            ) from exc
+    def _error_map(self, exc: Exception) -> LLMError | None:
+        if isinstance(exc, openai.AuthenticationError):
+            return LLMAuthError(str(exc))
+        if isinstance(exc, openai.RateLimitError):
+            return LLMRateLimitError(str(exc))
+        if isinstance(exc, openai.APIError):
+            return LLMError(str(exc))
+        return None
 
-    async def complete_json(
+    async def _call(self, system_prompt: str, user_message: str) -> str:
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+        )
+        return response.choices[0].message.content or ""
+
+    async def _call_json(
         self,
         system_prompt: str,
         user_message: str,
         schema: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        try:
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                temperature=self._temperature,
-                max_tokens=self._max_tokens,
-                response_format={"type": "json_object"},
-            )
-            text = response.choices[0].message.content or ""
-            return extract_json(text)
-        except openai.AuthenticationError as exc:
-            raise LLMAuthError(str(exc)) from exc
-        except openai.RateLimitError as exc:
-            raise LLMRateLimitError(str(exc)) from exc
-        except openai.APIError as exc:
-            raise LLMError(str(exc)) from exc
-        except LLMError:
-            raise
-        except Exception as exc:
-            raise LLMError(
-                f"Unexpected error from OpenAI-compatible API: {exc}"
-            ) from exc
+        response = await self._client.chat.completions.create(
+            model=self._model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=self._temperature,
+            max_tokens=self._max_tokens,
+            response_format={"type": "json_object"},
+        )
+        text = response.choices[0].message.content or ""
+        return extract_json(text)

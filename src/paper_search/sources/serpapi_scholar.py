@@ -44,7 +44,6 @@ class SerpAPIScholarSource(SearchSource):
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self._client = client or httpx.AsyncClient()
-        self._owns_client = client is None
         self._lock = asyncio.Lock()
         self._last_request_time = 0.0
         self._min_interval = 1.0 / rate_limit_rps
@@ -306,23 +305,4 @@ class SerpAPIScholarSource(SearchSource):
                 )
             )
 
-        deduped: list[RawPaper] = []
-        seen: set[str] = set()
-        for paper in all_results:
-            result_id = paper.raw_data.get("result_id") if paper.raw_data else None
-            link = paper.raw_data.get("link") if paper.raw_data else None
-
-            if result_id:
-                key = f"rid:{result_id}"
-            elif link:
-                key = f"link:{link}"
-            else:
-                key = f"title:{paper.title.lower().strip()}{paper.year}"
-
-            if key in seen:
-                continue
-
-            seen.add(key)
-            deduped.append(paper)
-
-        return deduped
+        return all_results

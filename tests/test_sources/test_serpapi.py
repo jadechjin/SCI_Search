@@ -281,9 +281,9 @@ class TestRateLimiting:
 
 class TestSearchAdvanced:
     @pytest.mark.asyncio
-    async def test_dedup(self):
+    async def test_multi_query(self):
         fixture = _load_fixture()
-        # Both queries return same results -> should dedupe
+        # Both queries return same results -> no source-level dedup (pipeline handles it)
         response = dict(fixture)
 
         client = AsyncMock(spec=httpx.AsyncClient)
@@ -301,7 +301,5 @@ class TestSearchAdvanced:
 
         results = await source.search_advanced(strategy)
 
-        # 5 unique papers in fixture, both queries return same 5 -> dedup to 5
-        assert len(results) == 5
-        result_ids = [r.raw_data.get("result_id") for r in results]
-        assert len(set(result_ids)) == len(result_ids)
+        # 5 papers per query, no source-level dedup -> 10 total
+        assert len(results) == 10

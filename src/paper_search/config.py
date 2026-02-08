@@ -30,12 +30,13 @@ class AppConfig(BaseModel):
     sources: dict[str, SearchSourceConfig] = {}
     default_max_results: int = 100
     domain: str = "general"
-    relevance_batch_size: int = 10
+    relevance_batch_size: int = 25
     relevance_max_concurrency: int = 5
     dedup_enable_llm_pass: bool = True
     dedup_llm_max_candidates: int = 60
-    mcp_decide_wait_timeout_s: float = 15.0
+    mcp_decide_wait_timeout_s: float = 300.0
     mcp_poll_interval_s: float = 0.05
+    require_user_response: bool = True
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -78,7 +79,7 @@ def load_config(env_path: str | Path | None = None) -> AppConfig:
         sources=sources,
         default_max_results=int(os.getenv("DEFAULT_MAX_RESULTS", "100")),
         domain=os.getenv("DOMAIN", "general"),
-        relevance_batch_size=int(os.getenv("RELEVANCE_BATCH_SIZE", "10")),
+        relevance_batch_size=int(os.getenv("RELEVANCE_BATCH_SIZE", "25")),
         relevance_max_concurrency=int(os.getenv("RELEVANCE_MAX_CONCURRENCY", "5")),
         dedup_enable_llm_pass=_env_bool("DEDUP_ENABLE_LLM_PASS", True),
         dedup_llm_max_candidates=int(os.getenv("DEDUP_LLM_MAX_CANDIDATES", "60")),
@@ -86,4 +87,5 @@ def load_config(env_path: str | Path | None = None) -> AppConfig:
             os.getenv("MCP_DECIDE_WAIT_TIMEOUT_S", "15.0")
         ),
         mcp_poll_interval_s=float(os.getenv("MCP_POLL_INTERVAL_S", "0.05")),
+        require_user_response=_env_bool("MCP_REQUIRE_USER_RESPONSE", True),
     )
