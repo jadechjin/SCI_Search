@@ -1,0 +1,120 @@
+{
+  "search_metadata": {
+    "id": "test_search_001",
+    "status": "Success",
+    "json_endpoint": "https://serpapi.com/searches/test.json",
+    "created_at": "2024-01-15 10:30:00 UTC",
+    "processed_at": "2024-01-15 10:30:01 UTC",
+    "google_scholar_url": "https://scholar.google.com/scholar?q=large+language+model",
+    "total_time_taken": 1.23
+  },
+  "search_parameters": {
+    "engine": "google_scholar",
+    "q": "large language model",
+    "num": "10"
+  },
+  "search_information": {
+    "total_results": 2340000,
+    "time_taken_displayed": 0.05,
+    "query_displayed": "large language model"
+  },
+  "organic_results": [
+    {
+      "position": 0,
+      "title": "Language Models are Few-Shot Learners",
+      "result_id": "abc123def456",
+      "link": "https://doi.org/10.48550/arXiv.2005.14165",
+      "snippet": "Recent work has demonstrated substantial gains on many NLP tasks and benchmarks by pre-training on a large corpus of text followed by fine-tuning...",
+      "publication_info": {
+        "summary": "T Brown, B Mann, N Ryder, M Subbiah - 2020 - Advances in neural information processing systems",
+        "authors": [
+          {"name": "T Brown", "author_id": "auth001"},
+          {"name": "B Mann", "author_id": "auth002"}
+        ]
+      },
+      "inline_links": {
+        "serpapi_cite_link": "https://serpapi.com/search.json?engine=google_scholar_cite&q=abc123def456",
+        "cited_by": {
+          "total": 15234,
+          "cites_id": "cites001",
+          "link": "https://scholar.google.com/scholar?cites=cites001"
+        },
+        "versions": {
+          "total": 12,
+          "cluster_id": "cluster001"
+        }
+      },
+      "resources": [
+        {
+          "title": "arxiv.org",
+          "file_format": "PDF",
+          "link": "https://arxiv.org/pdf/2005.14165.pdf"
+        }
+      ]
+    },
+    {
+      "position": 1,
+      "title": "A Survey of Large Language Models",
+      "result_id": "ghi789jkl012",
+      "link": "https://arxiv.org/abs/2303.18223",
+      "snippet": "Language is essentially a complex, intricate system of human expressions governed by grammatical rules. It poses a significant challenge to develop...",
+      "publication_info": {
+        "summary": "W Zhao, K Zhou, J Li - 2023 - arxiv.org"
+      },
+      "inline_links": {
+        "cited_by": {
+          "total": 3421,
+          "cites_id": "cites002"
+        }
+      }
+    },
+    {
+      "position": 2,
+      "title": "Attention Is All You Need",
+      "result_id": "mno345pqr678",
+      "link": "https://proceedings.neurips.cc/paper/7181-attention-is-all",
+      "snippet": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder...",
+      "publication_info": {
+        "summary": "A Vaswani, N Shazeer, N Parmar - 2017 - Advances in neural information processing systems"
+      },
+      "inline_links": {
+        "cited_by": {
+          "total": 98765
+        },
+        "versions": {
+          "total": 25
+        }
+      }
+    },
+    {
+      "position": 3,
+      "title": "BERT: Pre-training of Deep Bidirectional Transformers",
+      "result_id": "stu901vwx234",
+      "link": "https://doi.org/10.18653/v1/N19-1423",
+      "snippet": "We introduce a new language representation model called BERT, designed to pre-train deep bidirectional representations from unlabeled text...",
+      "publication_info": {
+        "summary": "J Devlin, MW Chang, K Lee - 2019 - books.google.com"
+      },
+      "inline_links": {
+        "cited_by": {
+          "total": 72000
+        }
+      }
+    },
+    {
+      "position": 4,
+      "title": "Scaling Laws for Neural Language Models",
+      "result_id": "yza567bcd890",
+      "link": "https://arxiv.org/abs/2001.08361",
+      "snippet": "We study empirical scaling laws for language model performance on the cross-entropy loss...",
+      "publication_info": {
+        "summary": "2020 - arxiv.org"
+      },
+      "inline_links": {
+        "cited_by": {
+          "total": 2100
+        }
+      }
+    }
+  ]
+}
