@@ -15,6 +15,7 @@ from paper_search.sources.base import SearchSource
 from paper_search.sources.exceptions import (
     NonRetryableError,
     RetryableError,
+    SerpAPICallLimitError,
     SerpAPIError,
 )
 
@@ -35,18 +36,21 @@ class SerpAPIScholarSource(SearchSource):
         self,
         api_key: str,
         rate_limit_rps: float = 2.0,
+        max_calls: int | None = None,
         timeout_s: float = 20.0,
         max_retries: int = 3,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self.api_key = api_key
         self.rate_limit_rps = rate_limit_rps
+        self.max_calls = max_calls
         self.timeout_s = timeout_s
         self.max_retries = max_retries
         self._client = client or httpx.AsyncClient()
         self._lock = asyncio.Lock()
         self._last_request_time = 0.0
         self._min_interval = 1.0 / rate_limit_rps
+        self._request_count = 0
 
     async def _rate_limit(self) -> None:
         async with self._lock:
@@ -61,7 +65,12 @@ class SerpAPIScholarSource(SearchSource):
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
+            if self.max_calls is not None and self._request_count >= self.max_calls:
+                raise SerpAPICallLimitError(
+                    f"SerpAPI call limit reached (max_calls={self.max_calls})"
+                )
             try:
+                self._request_count += 1
                 response = await self._client.get(
                     "https://serpapi.com/search.json",
                     params=params,
@@ -264,11 +273,15 @@ class SerpAPIScholarSource(SearchSource):
         start = 0
 
         while len(papers) < max_results:
+            if self.max_calls is not None and self._request_count >= self.max_calls:
+                break
             page_params = dict(params)
             page_params["start"] = start
 
             try:
                 data = await self._fetch_page(page_params)
+            except SerpAPICallLimitError:
+                break
             except SerpAPIError:
                 if papers:
                     return papers[:max_results]

@@ -22,7 +22,7 @@ from paper_search.workflow.engine import SearchWorkflow
 logger = logging.getLogger(__name__)
 
 TRIVIAL_RESPONSES = frozenset({
-    "", "approve", "ok", "yes", "y", "proceed", "continue",
+    "", "approve", "reject", "edit", "ok", "yes", "no", "y", "n", "proceed", "continue",
     "确认", "批准", "同意", "好", "是",
 })
 
@@ -195,7 +195,7 @@ class SessionManager:
             state["checkpoint_payload"] = serialize_checkpoint_payload(ckpt)
             state["user_action_required"] = True
             state["user_question"] = format_checkpoint_question(ckpt)
-            state["user_options"] = ["approve", "edit", "reject"]
+            state["user_options"] = ["approve", "reject"]
             if ckpt.kind == CheckpointKind.STRATEGY_CONFIRMATION:
                 state["summary"] = "Strategy ready for review"
             elif ckpt.kind == CheckpointKind.RESULT_REVIEW:

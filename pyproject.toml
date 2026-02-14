@@ -22,7 +22,6 @@ dev = [
 mcp = [
     "mcp>=1.22",
 ]
-
 [project.scripts]
 paper-search-mcp = "paper_search.mcp_server:main"
 

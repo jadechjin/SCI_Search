@@ -7,7 +7,7 @@
 ## 特性
 
 - **自然语言输入** - 用日常语言描述你要找的论文
-- **多 LLM 支持** - OpenAI、Anthropic Claude、Google Gemini 统一接口
+- **多 LLM 支持** - OpenAI、Anthropic Claude、Google Gemini以及所有支持openai和anthropic格式的统一接口
 - **人机协作** - 检查点机制，支持策略审批和结果审阅
 - **迭代优化** - 拒绝或编辑结果可触发带反馈的精细化搜索
 - **领域特化** - 内置材料科学领域术语支持
@@ -91,6 +91,7 @@ cp .env.example .env
 | `LLM_MAX_TOKENS` | `4096` | 最大输出 token 数 |
 | `LLM_BASE_URL` | - | 自定义端点（兼容 OpenAI 的代理） |
 | `DEFAULT_MAX_RESULTS` | `100` | 每次搜索最大结果数 |
+| `SERPAPI_MAX_CALLS` | - | 每次工作流运行可发起的 SerpAPI 请求上限（留空表示不限制） |
 | `DOMAIN` | `general` | 研究领域（`general` 或 `materials_science`） |
 
 ### 性能调优
@@ -229,7 +230,7 @@ Claude Desktop 配置（`claude_desktop_config.json`）：
 }
 ```
 
-使用 OpenAI 兼容代理时，在 `env` 中添加 `"LLM_BASE_URL": "https://your-proxy.example.com/v1"`。
+使用兼容代理时，在 `env` 中添加 `"LLM_BASE_URL": "https://your-proxy.example.com/v1"`。
 
 **MCP 工具：**
 
@@ -362,6 +363,13 @@ class ParsedIntent:
 - **`materials_science`** - 材料科学领域，包含专业术语映射和领域知识
 
 通过 `DOMAIN` 环境变量或 `config.domain` 参数配置。
+
+也支持从 `.env` 自动加载自定义领域术语（变量名与 `DOMAIN` 值相同）：
+
+```env
+DOMAIN=makesi
+makesi=makesi is a metallurgy-focused research domain; key terms include HEA, phase diagram, diffusion, CALPHAD
+```
 
 ## 项目结构
 

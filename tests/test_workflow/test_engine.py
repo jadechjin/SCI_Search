@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from paper_search.config import AppConfig, LLMConfig, SearchSourceConfig
+from paper_search.config import AppConfig, LLMConfig, SearchSourceConfig, load_config
 from paper_search.llm.base import LLMProvider
 from paper_search.models import (
     Author,
@@ -577,3 +577,33 @@ class TestFromConfig:
         )
         wf = SearchWorkflow.from_config(config)
         assert isinstance(wf, SearchWorkflow)
+
+    def test_passes_serpapi_max_calls(self):
+        config = AppConfig(
+            llm=LLMConfig(
+                provider="openai",
+                model="gpt-4",
+                api_key="test-key",
+            ),
+            sources={
+                "serpapi_scholar": SearchSourceConfig(
+                    name="serpapi_scholar",
+                    api_key="serp-key",
+                    enabled=True,
+                    max_calls=7,
+                )
+            },
+        )
+        wf = SearchWorkflow.from_config(config)
+        assert isinstance(wf, SearchWorkflow)
+
+        src = wf._searcher._sources["serpapi_scholar"]
+        assert getattr(src, "max_calls") == 7
+
+    def test_load_config_reads_serpapi_max_calls_from_env(self, monkeypatch):
+        monkeypatch.setenv("SERPAPI_API_KEY", "serp-key")
+        monkeypatch.setenv("SERPAPI_MAX_CALLS", "3")
+
+        config = load_config()
+        source_cfg = config.sources["serpapi_scholar"]
+        assert source_cfg.max_calls == 3

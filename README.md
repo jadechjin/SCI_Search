@@ -91,6 +91,7 @@ cp .env.example .env
 | `LLM_MAX_TOKENS` | `4096` | Max output tokens |
 | `LLM_BASE_URL` | - | Custom endpoint (OpenAI-compatible proxy) |
 | `DEFAULT_MAX_RESULTS` | `100` | Max results per search |
+| `SERPAPI_MAX_CALLS` | - | Max SerpAPI requests per workflow run (empty = unlimited) |
 | `DOMAIN` | `general` | Research domain (`general` or `materials_science`) |
 
 ### Performance Tuning
@@ -362,6 +363,13 @@ The system supports domain-specific prompt templates:
 - **`materials_science`** - Materials science with specialized terminology mapping and domain knowledge
 
 Configure via `DOMAIN` environment variable or `config.domain` parameter.
+
+Custom domain terminology can also be loaded from `.env` using the same variable name as `DOMAIN`:
+
+```env
+DOMAIN=makesi
+makesi=makesi is a metallurgy-focused research domain; key terms include HEA, phase diagram, diffusion, CALPHAD
+```
 
 ## Project Structure
 

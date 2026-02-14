@@ -22,10 +22,14 @@ def _load_fixture() -> dict:
     return json.loads((FIXTURES_DIR / "serpapi_response.json").read_text())
 
 
-def _make_source(client: httpx.AsyncClient | None = None) -> SerpAPIScholarSource:
+def _make_source(
+    client: httpx.AsyncClient | None = None,
+    max_calls: int | None = None,
+) -> SerpAPIScholarSource:
     return SerpAPIScholarSource(
         api_key="test_key",
         rate_limit_rps=100.0,  # fast for tests
+        max_calls=max_calls,
         timeout_s=5.0,
         max_retries=3,
         client=client,
@@ -213,6 +217,37 @@ class TestSearch:
         results = await source.search("test", max_results=10)
 
         assert len(results) == 3  # got page 1 results despite page 2 failure
+
+    @pytest.mark.asyncio
+    async def test_respects_max_calls_limit(self):
+        fixture = _load_fixture()
+        page1 = dict(fixture)
+        page1["organic_results"] = fixture["organic_results"][:3]
+
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.get = AsyncMock(
+            side_effect=[
+                _mock_response(200, page1),
+                _mock_response(200, fixture),
+            ]
+        )
+
+        source = _make_source(client=client, max_calls=1)
+        results = await source.search("test query", max_results=10)
+
+        assert len(results) == 3
+        assert client.get.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_zero_max_calls_makes_no_requests(self):
+        client = AsyncMock(spec=httpx.AsyncClient)
+        client.get = AsyncMock(return_value=_mock_response(200, _load_fixture()))
+
+        source = _make_source(client=client, max_calls=0)
+        results = await source.search("test query", max_results=10)
+
+        assert results == []
+        assert client.get.call_count == 0
 
 
 # ======================================================================

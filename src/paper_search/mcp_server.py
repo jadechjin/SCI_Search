@@ -27,7 +27,7 @@ mcp = FastMCP(
         "2. When the response contains 'user_action_required: true', you MUST:\n"
         "   - Use the AskUserQuestion tool (if available) to present options to the user\n"
         "   - The question should include the checkpoint summary from user_question\n"
-        "   - Options should map to: approve, edit, reject\n"
+        "   - Options should map to: approve, reject\n"
         "   - If AskUserQuestion is not available, present the user_question text directly\n"
         "   - Wait for the user's explicit decision\n"
         "3. Call decide(session_id, action, user_response=<user's verbatim response>)\n"
@@ -71,7 +71,7 @@ async def search_papers(
     - strategy: generated search queries (keywords + boolean_query), sources, filters
     - user_action_required: true when a checkpoint needs user review
     - user_question: formatted question to present to the user
-    - user_options: available actions ["approve", "edit", "reject"]
+    - user_options: available actions ["approve", "reject"]
 
     IMPORTANT: Present the checkpoint_payload to the user for review before calling decide().
     """
@@ -129,10 +129,11 @@ async def decide(
             {"error": f"Invalid action '{action}'. Must be one of: {valid_actions}"}
         )
 
+    normalized_response = (user_response or "").strip().lower()
     if session.require_user_response:
         if (
             user_response is None
-            or user_response.strip().lower() in TRIVIAL_RESPONSES
+            or normalized_response in TRIVIAL_RESPONSES
         ):
             return json.dumps({
                 "error": (
@@ -142,6 +143,38 @@ async def decide(
                 ),
                 "hint": "Show the user_question from the checkpoint and ask for their decision.",
             })
+
+    if action == "edit" and (not isinstance(data, dict) or not data):
+        return json.dumps({
+            "error": (
+                "action='edit' requires revised data. "
+                "Collect concrete edits from the user before calling decide()."
+            ),
+            "hint": (
+                "Ask follow-up questions, then pass the revised object via data."
+            ),
+        })
+
+    if action == "reject":
+        has_data = isinstance(data, dict) and bool(data)
+        has_note = isinstance(note, str) and bool(note.strip())
+        has_response_reason = (
+            isinstance(user_response, str)
+            and bool(user_response.strip())
+            and normalized_response not in TRIVIAL_RESPONSES
+        )
+        if not (has_data or has_note or has_response_reason):
+            return json.dumps({
+                "error": (
+                    "action='reject' requires substantive feedback "
+                    "(note, data, or a detailed user_response)."
+                ),
+                "hint": (
+                    "Ask the user why they reject and include that feedback in note/data."
+                ),
+            })
+        if not has_note and has_response_reason and isinstance(user_response, str):
+            note = user_response.strip()
 
     previous_sig = session.handler.checkpoint_signature()
     decision = Decision(

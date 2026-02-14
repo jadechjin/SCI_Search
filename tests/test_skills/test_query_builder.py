@@ -182,3 +182,11 @@ class TestQueryBuilderPromptComposition:
         prompt = builder._compose_prompt()
         assert prompt.startswith(QUERY_BUILDING_SYSTEM)
         assert "material families" in prompt
+
+    def test_custom_domain_loaded_from_env(self, monkeypatch):
+        llm = MockLLM()
+        monkeypatch.setenv("makesi", "makesi = custom terms for alloy processing")
+        builder = QueryBuilder(llm, domain="makesi")
+        prompt = builder._compose_prompt()
+        assert prompt.startswith(QUERY_BUILDING_SYSTEM)
+        assert "custom terms for alloy processing" in prompt

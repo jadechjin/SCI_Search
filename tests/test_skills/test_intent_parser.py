@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import ValidationError
@@ -121,3 +120,11 @@ class TestIntentParserPromptComposition:
         parser = IntentParser(llm, domain="unknown_xyz")
         prompt = parser._compose_prompt()
         assert prompt == INTENT_PARSING_SYSTEM
+
+    def test_custom_domain_loaded_from_env(self, monkeypatch):
+        llm = MockLLMProvider()
+        monkeypatch.setenv("makesi", "makesi is metallurgy focused terminology")
+        parser = IntentParser(llm, domain="makesi")
+        prompt = parser._compose_prompt()
+        assert prompt.startswith(INTENT_PARSING_SYSTEM)
+        assert "makesi is metallurgy focused terminology" in prompt

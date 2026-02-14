@@ -110,8 +110,7 @@ def format_checkpoint_question(checkpoint: Checkpoint) -> str:
             f"**Sources:** {', '.join(payload.strategy.sources)}\n\n"
             f"Please choose an action:\n"
             f"1. **Approve** - proceed with searching\n"
-            f"2. **Edit** - modify the queries or sources\n"
-            f"3. **Reject** - generate new queries\n"
+            f"2. **Reject** - generate new queries with your feedback\n"
         )
 
     if kind == CheckpointKind.RESULT_REVIEW:
@@ -180,8 +179,7 @@ def format_checkpoint_question(checkpoint: Checkpoint) -> str:
             f"{full_list_text}\n\n"
             f"Please choose an action:\n"
             f"1. **Approve** - accept results and finish\n"
-            f"2. **Edit** - mark relevant papers and refine\n"
-            f"3. **Reject** - search again with refined queries\n"
+            f"2. **Reject** - search again with your feedback\n"
         )
 
     return f"Checkpoint ready: {kind.value}"

@@ -247,6 +247,7 @@ class SearchWorkflow:
                     SerpAPIScholarSource(
                         api_key=src_cfg.api_key,
                         rate_limit_rps=src_cfg.rate_limit,
+                        max_calls=src_cfg.max_calls,
                     )
                 )
 

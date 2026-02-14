@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class LLMConfig(BaseModel):
@@ -23,6 +23,7 @@ class SearchSourceConfig(BaseModel):
     api_key: str = ""
     enabled: bool = True
     rate_limit: float = 1.0
+    max_calls: int | None = Field(default=None, ge=0)
 
 
 class AppConfig(BaseModel):
@@ -67,11 +68,18 @@ def load_config(env_path: str | Path | None = None) -> AppConfig:
 
     sources: dict[str, SearchSourceConfig] = {}
     serpapi_key = os.getenv("SERPAPI_API_KEY", "")
+    serpapi_max_calls_raw = os.getenv("SERPAPI_MAX_CALLS")
+    serpapi_max_calls = (
+        int(serpapi_max_calls_raw)
+        if serpapi_max_calls_raw not in {None, ""}
+        else None
+    )
     if serpapi_key:
         sources["serpapi_scholar"] = SearchSourceConfig(
             name="serpapi_scholar",
             api_key=serpapi_key,
             enabled=True,
+            max_calls=serpapi_max_calls,
         )
 
     return AppConfig(

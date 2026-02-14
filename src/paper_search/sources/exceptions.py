@@ -15,3 +15,7 @@ class RetryableError(SerpAPIError):
 
 class NonRetryableError(SerpAPIError):
     """Permanent error that should not be retried (401, 403)."""
+
+
+class SerpAPICallLimitError(NonRetryableError):
+    """SerpAPI call budget exhausted for current source instance."""

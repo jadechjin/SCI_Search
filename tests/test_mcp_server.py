@@ -24,7 +24,6 @@ from paper_search.workflow.session import (
     MCPCheckpointHandler,
     SessionManager,
     WorkflowSession,
-    TRIVIAL_RESPONSES as _TRIVIAL_RESPONSES,
 )
 from paper_search.workflow.checkpoints import (
     Checkpoint,
@@ -590,7 +589,6 @@ class TestFormatCheckpointQuestion:
         question = _format_checkpoint_question(ckpt)
         assert "test" in question
         assert "Approve" in question
-        assert "Edit" in question
         assert "Reject" in question
         assert "Strategy Review" in question
 
@@ -605,7 +603,6 @@ class TestFormatCheckpointQuestion:
         question = _format_checkpoint_question(ckpt)
         assert "3 papers" in question
         assert "Approve" in question
-        assert "Edit" in question
         assert "Reject" in question
         assert "Results Review" in question
 
@@ -686,7 +683,7 @@ class TestSessionStateUserQuestion:
         assert result["user_action_required"] is True
         assert "user_question" in result
         assert "Strategy Review" in result["user_question"]
-        assert result["user_options"] == ["approve", "edit", "reject"]
+        assert result["user_options"] == ["approve", "reject"]
 
         handler.set_decision(Decision(action=DecisionAction.APPROVE))
         await task
@@ -835,6 +832,60 @@ class TestDecideUserResponse:
         handler.set_decision(Decision(action=DecisionAction.APPROVE))
         await flow_task
         del _session_manager._sessions["test-ur-good"]
+
+    @pytest.mark.asyncio
+    async def test_reject_requires_feedback_when_response_validation_disabled(self):
+        from paper_search.mcp_server import decide, _session_manager
+
+        handler = MCPCheckpointHandler()
+        session = WorkflowSession(
+            session_id="test-reject-needs-feedback",
+            query="test",
+            handler=handler,
+            require_user_response=False,
+        )
+        _session_manager._sessions["test-reject-needs-feedback"] = session
+
+        ckpt = _make_checkpoint()
+        task = asyncio.create_task(handler.handle(ckpt))
+        await asyncio.sleep(0.05)
+
+        result = json.loads(
+            await decide("test-reject-needs-feedback", "reject")
+        )
+        assert "error" in result
+        assert "requires substantive feedback" in result["error"]
+        assert handler.has_pending_checkpoint is True
+
+        handler.set_decision(Decision(action=DecisionAction.APPROVE))
+        await task
+        del _session_manager._sessions["test-reject-needs-feedback"]
+
+    @pytest.mark.asyncio
+    async def test_edit_requires_data_when_response_validation_disabled(self):
+        from paper_search.mcp_server import decide, _session_manager
+
+        handler = MCPCheckpointHandler()
+        session = WorkflowSession(
+            session_id="test-edit-needs-data",
+            query="test",
+            handler=handler,
+            require_user_response=False,
+        )
+        _session_manager._sessions["test-edit-needs-data"] = session
+
+        ckpt = _make_checkpoint()
+        task = asyncio.create_task(handler.handle(ckpt))
+        await asyncio.sleep(0.05)
+
+        result = json.loads(await decide("test-edit-needs-data", "edit"))
+        assert "error" in result
+        assert "requires revised data" in result["error"]
+        assert handler.has_pending_checkpoint is True
+
+        handler.set_decision(Decision(action=DecisionAction.APPROVE))
+        await task
+        del _session_manager._sessions["test-edit-needs-data"]
 
     @pytest.mark.asyncio
     async def test_skips_validation_when_disabled(self):
