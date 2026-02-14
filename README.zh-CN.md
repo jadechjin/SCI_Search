@@ -1,58 +1,58 @@
-# paper-search
+# Paper Search
 
-基于 AI 的学术论文搜索工作流系统。用自然语言描述你的研究需求，系统自动完成意图解析、查询构建、多源搜索、去重、相关性评分和结果整理。
+一个基于 AI 的学术论文搜索工作流系统。用自然语言描述你的研究需求，系统自动完成意图解析、查询构建、多源搜索、去重、相关性评分和结果导出。
 
 [English](./README.md) | **中文**
 
 ## 特性
 
-- **自然语言输入** - 用日常语言描述你要找的论文
-- **多 LLM 支持** - OpenAI、Anthropic Claude、Google Gemini以及所有支持openai和anthropic格式的统一接口
-- **人机协作** - 检查点机制，支持策略审批和结果审阅
-- **迭代优化** - 拒绝或编辑结果可触发带反馈的精细化搜索
-- **领域特化** - 内置材料科学领域术语支持
-- **多种接口** - Python 库、命令行、MCP Server（AI Agent 集成）
-- **导出格式** - JSON、BibTeX、Markdown
+- **自然语言输入、多 LLM 支持** - 使用 OpenAI、Anthropic Claude、Google Gemini 以及所有支持 OpenAI 和 Anthropic Claude 格式的模型。用日常语言描述你要找的论文，工作流就能帮你找到你想要的文章！
 
-## 系统架构
+  ![屏幕截图 2026-02-15 015304](img\屏幕截图 2026-02-15 015304.png)
+
+- **人机协作、迭代优化** - 拒绝或编辑结果可触发<span style="font-weight:bold;">带反馈的精细化搜索</span>。拒绝了一次，结果还让你不满意？那就来<span style="font-weight:bold;">亿次</span>！使用检查点机制介入流程，支持<span style="font-weight:bold;">无上限</span>的策略审批和结果审阅，包括<span style="font-weight:bold;">自定义反馈</span>！
+
+  ![屏幕截图 2026-02-15 015502](img\屏幕截图 2026-02-15 015502.png)
+
+  ![屏幕截图 2026-02-15 031239](img\屏幕截图 2026-02-15 031239.png)
+
+- **领域自定义、让 AI 更懂你的需求** - 内置泛化 STEM 领域提示词和材料科学领域（生是材料人，死是材料魂！）术语支持，也可自定义。
+
+## 实操演示
+
+![屏幕录制 2026-02-15 032513](img\屏幕录制 2026-02-15 032513.gif)
+
+## 工作流程
+
+```mermaid
+graph TD
+    A["用户查询（自然语言）"] --> B["IntentParser<br/>LLM 解析研究意图"];
+    B --> C[QueryBuilder];
+    C --> C1{"检查点 1：策略确认"};
+    C1 -- 是 --> D["Searcher<br/>多种文献搜索源并行检索文献"];
+    C1 -- 否 --> C;
+    D --> E["Deduplicator<br/>DOI/URL/标题去重 + LLM 语义匹配"];
+    E --> F["RelevanceScorer<br/>LLM 批量评分检索结果，并发控制"];
+    F --> G[ResultOrganizer<br/>将结果整理为表格以审阅];
+    G --> G1{"检查点 2：结果审阅"};
+    G1 -- 是 --> H["PaperCollection<br/>（导出最终结果）"];
+    G1 -- 否 --> C;
+
+    %% Styling
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style H fill:#ccf,stroke:#333,stroke-width:2px
+    style C1 fill:#bbf,stroke:#333,stroke-width:2px
+    style G1 fill:#bbf,stroke:#333,stroke-width:2px
+
 
 ```
-用户查询（自然语言）
-    |
-    v
-+----------------+
-|  IntentParser  |  <- LLM 解析研究意图
-+-------+--------+
-        v
-+----------------+     +----------------------------+
-|  QueryBuilder  | --> | 检查点 1：策略确认          | （可选）
-+-------+--------+     +----------------------------+
-        v
-+----------------+
-|    Searcher    |  <- SerpAPI Google Scholar 搜索
-+-------+--------+
-        v
-+----------------+
-|  Deduplicator  |  <- DOI / URL / 标题去重 + LLM 语义匹配
-+-------+--------+
-        v
-+------------------+
-| RelevanceScorer  |  <- LLM 批量评分，并发控制
-+-------+----------+
-        v
-+------------------+     +----------------------------+
-| ResultOrganizer  | --> | 检查点 2：结果审阅          | （必需）
-+-------+----------+     +----------------------------+
-        v
-  PaperCollection（最终结果）
-```
 
-在结果审阅检查点，可以选择**拒绝**或**编辑**来触发新一轮搜索迭代。用户反馈会传递给 QueryBuilder 以优化下一轮查询。
+在结果审阅检查点，可以选择 **拒绝** 或 **编辑** 来触发新一轮搜索迭代。用户反馈会传递给 QueryBuilder 以优化下一轮查询。
 
 ## 安装
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/jadechjin/SCI_Search.git
 cd workflow
 
 # 使用 uv 安装依赖
@@ -66,7 +66,7 @@ uv sync --extra mcp
 
 ## 配置
 
-将 `.env.example` 复制为 `.env` 并填入 API 密钥：
+将 `.env.example` 复制为 `.env` 并填入相关参数：
 
 ```bash
 cp .env.example .env
@@ -78,9 +78,9 @@ cp .env.example .env
 |------|------|------|
 | `SERPAPI_API_KEY` | SerpAPI 密钥（Google Scholar） | `abc123...` |
 | `LLM_PROVIDER` | LLM 提供商 | `openai` / `anthropic` / `gemini` |
-| `OPENAI_API_KEY` | OpenAI API 密钥（provider=openai 时） | `sk-...` |
-| `ANTHROPIC_API_KEY` | Anthropic API 密钥（provider=anthropic 时） | `sk-ant-...` |
-| `GOOGLE_API_KEY` | Google API 密钥（provider=gemini 时） | `AIza...` |
+| `OPENAI_API_KEY` | OpenAI API 密钥（provider = openai 时） | `sk-...` |
+| `ANTHROPIC_API_KEY` | Anthropic API 密钥（provider = anthropic 时） | `sk-ant-...` |
+| `GOOGLE_API_KEY` | Google API 密钥（provider = gemini 时） | `AIza...` |
 
 ### 可选配置
 
@@ -92,7 +92,7 @@ cp .env.example .env
 | `LLM_BASE_URL` | - | 自定义端点（兼容 OpenAI 的代理） |
 | `DEFAULT_MAX_RESULTS` | `100` | 每次搜索最大结果数 |
 | `SERPAPI_MAX_CALLS` | - | 每次工作流运行可发起的 SerpAPI 请求上限（留空表示不限制） |
-| `DOMAIN` | `general` | 研究领域（`general` 或 `materials_science`） |
+| `DOMAIN` | `general` | 研究领域（`general` 或 `materials_science` 以及更多自定义领域） |
 
 ### 性能调优
 
@@ -107,7 +107,7 @@ cp .env.example .env
 
 ## 使用方式
 
-### Python 库
+### Python（不推荐）
 
 一行代码搜索（自动批准所有检查点）：
 
@@ -170,40 +170,9 @@ print(f"高频作者: {results.facets.top_authors}")
 print(f"关键主题: {results.facets.key_themes}")
 ```
 
-### 自定义检查点处理器
+### MCP Server（推荐配合 CC 食用）
 
-实现人机协作控制：
-
-```python
-from paper_search.config import load_config
-from paper_search.workflow import SearchWorkflow
-from paper_search.workflow.checkpoints import (
-    Checkpoint, CheckpointKind, Decision, DecisionAction,
-)
-
-class MyHandler:
-    async def handle(self, checkpoint: Checkpoint) -> Decision:
-        if checkpoint.kind == CheckpointKind.STRATEGY_CONFIRMATION:
-            strategy = checkpoint.payload.strategy
-            print(f"策略: {len(strategy.queries)} 条查询")
-            for q in strategy.queries:
-                print(f"  - {q.boolean_query}")
-            return Decision(action=DecisionAction.APPROVE)
-
-        elif checkpoint.kind == CheckpointKind.RESULT_REVIEW:
-            collection = checkpoint.payload.collection
-            print(f"找到 {len(collection.papers)} 篇论文")
-            # APPROVE 接受 / REJECT 或 EDIT 触发迭代
-            return Decision(action=DecisionAction.APPROVE)
-
-config = load_config()
-wf = SearchWorkflow.from_config(config, checkpoint_handler=MyHandler())
-results = await wf.run("高熵合金力学性能")
-```
-
-### MCP Server
-
-将搜索功能暴露为 MCP 工具，供 Claude 等 AI Agent 调用：
+将搜索功能暴露为 MCP 工具，供 Claude 等 AI Agent 调用，能自动使用工作流中的所有功能：
 
 ```bash
 uv sync --extra mcp
@@ -212,14 +181,14 @@ uv sync --extra mcp
 uv run paper-search-mcp
 ```
 
-Claude Desktop 配置（`claude_desktop_config.json`）：
+Claude Code 或 Claude Desktop 配置（`claude_desktop_config.json`）：
 
 ```json
 {
   "mcpServers": {
     "paper-search": {
       "command": "uv",
-      "args": ["run", "--directory", "/path/to/workflow", "paper-search-mcp"],
+      "args": ["run", "--directory", "此处填写项目地址", "paper-search-mcp"],
       "env": {
         "SERPAPI_API_KEY": "your-key",
         "LLM_PROVIDER": "openai",
@@ -232,7 +201,7 @@ Claude Desktop 配置（`claude_desktop_config.json`）：
 
 使用兼容代理时，在 `env` 中添加 `"LLM_BASE_URL": "https://your-proxy.example.com/v1"`。
 
-**MCP 工具：**
+**MCP 工具包含：**
 
 | 工具 | 说明 |
 |------|------|
@@ -240,33 +209,6 @@ Claude Desktop 配置（`claude_desktop_config.json`）：
 | `decide(session_id, action, data?, note?)` | 提交检查点决策（approve/edit/reject） |
 | `export_results(session_id, format?)` | 导出结果（json/bibtex/markdown） |
 | `get_session(session_id)` | 查询会话状态和进度 |
-
-**Agent 交互流程：**
-
-```
-Agent                                    MCP Server
-  |                                          |
-  +- search_papers("...") ------------------>|
-  |                                          |-- 启动后台工作流
-  |<- {session_id, checkpoint_payload: {   --|
-  |      intent: {...}, strategy: {...}      |
-  |   }} ----------------------------------- |
-  |                                          |
-  |  （Agent 审阅策略，做出决策）              |
-  +- decide(sid, "approve") ---------------->|
-  |                                          |-- 管线继续执行
-  |<- {checkpoint_payload: {               --|
-  |      papers: [...], facets: {...}        |
-  |   }} ----------------------------------- |
-  |                                          |
-  |  （Agent 审阅结果，做出决策）              |
-  +- decide(sid, "approve") ---------------->|
-  |                                          |-- 完成
-  |<- {is_complete: true} ------------------|
-  |                                          |
-  +- export_results(sid, "bibtex") --------->|
-  |<- BibTeX 内容 ------------------------- |
-```
 
 ### 命令行
 
@@ -355,22 +297,6 @@ class ParsedIntent:
     constraints: SearchConstraints
 ```
 
-## 领域特化
-
-系统支持领域专用的提示词模板：
-
-- **`general`** - 通用学术搜索（默认）
-- **`materials_science`** - 材料科学领域，包含专业术语映射和领域知识
-
-通过 `DOMAIN` 环境变量或 `config.domain` 参数配置。
-
-也支持从 `.env` 自动加载自定义领域术语（变量名与 `DOMAIN` 值相同）：
-
-```env
-DOMAIN=makesi
-makesi=makesi is a metallurgy-focused research domain; key terms include HEA, phase diagram, diffusion, CALPHAD
-```
-
 ## 项目结构
 
 ```
@@ -421,17 +347,6 @@ uv run pytest tests/ -v
 ```
 
 213 项测试覆盖所有模块：数据模型、LLM 提供商、SerpAPI 适配器、全部 6 个技能、工作流引擎、检查点、导出、库 API、MCP Server 和命令行。
-
-## 依赖
-
-- **pydantic** >= 2.0 - 数据验证
-- **httpx** - HTTP 客户端
-- **python-dotenv** - 环境配置
-- **openai** - OpenAI 提供商
-- **anthropic** - Claude 提供商
-- **google-genai** - Gemini 提供商
-- **google-search-results** - SerpAPI 客户端
-- **mcp** >= 1.22 - MCP Server（可选）
 
 ## 许可证
 
