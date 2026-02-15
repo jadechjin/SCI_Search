@@ -72,6 +72,8 @@ uv sync --extra mcp
 cp .env.example .env
 ```
 
+模型供应商请自备，检索源目前支持 Serpapi（更多检索源开发中）注册登录复制密钥到 .env 即可
+
 ### 必需配置
 
 | 变量 | 说明 | 示例 |
